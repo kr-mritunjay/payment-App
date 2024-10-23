@@ -1,97 +1,161 @@
-import { useEffect, useState } from "react";
-import { Button } from "./Button";
-import axios from "axios";
-import { FiSearch } from "react-icons/fi";
-import { AiOutlineLoading3Quarters } from "react-icons/ai";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Search, UserCircle2, ArrowUpDown, RefreshCw } from "lucide-react";
+// import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "./Button";
+import { Input } from "./InputBox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
-export const Users = () => {
+const Users = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [filter, setFilter] = useState("");
+  const [sortOrder, setSortOrder] = useState("asc");
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-
-    axios
-      .get("http://localhost:5000/api/v1/user/all?filter=" + filter, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-      .then((response) => {
-        setUsers(response.data.users);
-        setLoading(false);
-      })
-      .catch((error) => {
-        setError("Error fetching users");
-        setLoading(false);
-        console.error("Error fetching users:", error);
-      });
+    fetchUsers();
   }, [filter]);
 
-  const filteredUsers = users.filter((user) =>
-    `${user.firstName} ${user.lastName}`
-      .toLowerCase()
-      .includes(searchTerm.toLowerCase())
-  );
+  const fetchUsers = async () => {
+    setLoading(true);
+    const token = localStorage.getItem("token");
+
+    try {
+      const response = await fetch(
+        `http://localhost:5000/api/v1/user/all?filter=${filter}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch users");
+      }
+
+      const data = await response.json();
+      setUsers(data.users);
+      setError(null);
+    } catch (error) {
+      setError("Error fetching users. Please try again.");
+      console.error("Error fetching users:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredUsers = users
+    .filter((user) =>
+      `${user.firstName} ${user.lastName}`
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase())
+    )
+    .sort((a, b) => {
+      const nameA = `${a.firstName} ${a.lastName}`.toLowerCase();
+      const nameB = `${b.firstName} ${b.lastName}`.toLowerCase();
+      return sortOrder === "asc"
+        ? nameA.localeCompare(nameB)
+        : nameB.localeCompare(nameA);
+    });
+
+  const toggleSortOrder = () => {
+    setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+  };
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
-      <div className="font-bold text-2xl mb-4">Users</div>
-      <div className="relative mb-4">
-        <input
-          type="text"
-          placeholder="Search users..."
-          className="w-full px-4 py-2 border rounded border-gray-300 focus:outline-none focus:border-blue-500"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
-        <FiSearch className="absolute right-3 top-3 text-gray-400" />
+      <h1 className="font-bold text-3xl mb-6">Users</h1>
+
+      <div className="flex space-x-4 mb-6">
+        <div className="relative flex-grow">
+          <Input
+            type="text"
+            placeholder="Search users..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+        </div>
+        <Select value={filter} onValueChange={setFilter}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Filter" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">All Users</SelectItem>
+            <SelectItem value="friends">Friends</SelectItem>
+            <SelectItem value="requests">Requests</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button onClick={toggleSortOrder} variant="outline">
+          <ArrowUpDown className="mr-2 h-4 w-4" />
+          {sortOrder === "asc" ? "A-Z" : "Z-A"}
+        </Button>
+        <Button onClick={fetchUsers} variant="outline">
+          <RefreshCw className="mr-2 h-4 w-4" />
+          Refresh
+        </Button>
       </div>
-      <div className="border-solid border-2 border-gray-200 rounded max-h-96 overflow-y-auto mt-4">
+
+      {error && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      <div className="border rounded-lg shadow-sm overflow-hidden">
         {loading ? (
-          <div className="text-center py-4">
-            <AiOutlineLoading3Quarters className="animate-spin text-2xl text-blue-500 mx-auto" />
-            Loading...
+          <div className="text-center py-8">
+            <RefreshCw className="animate-spin h-8 w-8 text-blue-500 mx-auto mb-2" />
+            <p>Loading users...</p>
           </div>
-        ) : error ? (
-          <div className="text-center py-4 text-red-500">{error}</div>
         ) : filteredUsers.length > 0 ? (
-          filteredUsers.map((user) => <User key={user.id} user={user} />)
+          <div className="divide-y">
+            {filteredUsers.map((user) => (
+              <UserItem key={user._id} user={user} />
+            ))}
+          </div>
         ) : (
-          <div className="text-center py-4">No users found</div>
+          <div className="text-center py-8 text-gray-500">No users found</div>
         )}
       </div>
     </div>
   );
 };
 
-function User({ user }) {
+const UserItem = ({ user }) => {
   const navigate = useNavigate();
+
   return (
-    <div className="flex justify-between items-center border-b border-gray-200 p-4 hover:bg-gray-50 transition">
-      <div className="flex items-center">
-        <div className="rounded-full h-12 w-12 bg-blue-500 text-white flex justify-center items-center text-xl mr-4">
-          {user.firstName[0]}
+    <div className="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors">
+      <div className="flex items-center space-x-4">
+        <div className="flex-shrink-0">
+          <UserCircle2 className="h-12 w-12 text-blue-500" />
         </div>
-        <div className="text-gray-700">
-          <div className="font-medium">
+        <div>
+          <h2 className="font-medium text-gray-900">
             {user.firstName} {user.lastName}
-          </div>
-          <div className="text-sm text-gray-500">{user.email}</div>
+          </h2>
+          <p className="text-sm text-gray-500">{user.email}</p>
         </div>
       </div>
-      <div>
-        <Button
-          onClick={() =>
-            navigate("/send?id=" + user._id + "&name=" + user.firstName)
-          }
-          label={"Send Money"}
-        />
-      </div>
+      <Button
+        onClick={() => navigate(`/send?id=${user._id}&name=${user.firstName}`)}
+      >
+        Send Money
+      </Button>
     </div>
   );
-}
+};
+
+export default Users;
